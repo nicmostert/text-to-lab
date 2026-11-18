@@ -1,0 +1,1 @@
+C:\Users\edreporting\text-to-lab\venv_arc243\Scripts\python.exe C:\Users\edreporting\text-to-lab\text_to_lab.py
