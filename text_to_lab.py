@@ -45,7 +45,7 @@ def load_settings() -> dict:
         "SURVEY123_ARCGIS_USERNAME",
         "SURVEY123_ARCGIS_PASSWORD",
         "SURVEY123_SURVEYS",
-        "SAMPLE_ALERT_RECIPIENT",
+        "SAMPLE_ALERT_RECIPIENTS",
         "SAMPLE_ALERT_TIMEZONE",
         "SMTP_HOST",
         "SMTP_PORT",
@@ -71,9 +71,16 @@ def load_settings() -> dict:
         if not item_id:
             raise ValueError(f"SURVEY123_SURVEYS line {line_number} has no item ID.")
         surveys.append({"name": name or item_id, "item_id": item_id})
-
     if not surveys:
         raise ValueError("Add at least one survey to SURVEY123_SURVEYS in .env.")
+        
+    recipients = []  
+    # One survey per line, formatted as: Survey name|ArcGIS item ID
+    for contact in os.environ["SAMPLE_ALERT_RECIPIENTS"].split(";"):
+        recipients.append(contact.strip())
+
+    if not recipients:
+        raise ValueError("Add at least one recipient to SAMPLE_ALERT_RECIPIENTS in .env.")
 
     try:
         port = int(os.environ["SMTP_PORT"])
@@ -85,7 +92,7 @@ def load_settings() -> dict:
         "arcgis_password": os.environ["SURVEY123_ARCGIS_PASSWORD"],
         "arcgis_url": os.environ["SURVEY123_ARCGIS_URL"],
         "surveys": surveys,
-        "recipient": os.environ["SAMPLE_ALERT_RECIPIENT"].strip(),
+        "recipients": recipients,
         "timezone": os.environ["SAMPLE_ALERT_TIMEZONE"].strip(),
         "smtp_host": os.environ["SMTP_HOST"].strip(),
         "smtp_port": port,
@@ -181,39 +188,42 @@ def survey_has_samples_today(gis: GIS, survey: dict, tz: ZoneInfo, local_today) 
 
 
 def send_smtp_alert(settings: dict, local_today) -> None:
-    msg = EmailMessage()
-    msg["Subject"] = f"HORIZONS SAMPLE NOTIFICATION: "
-    msg["From"] = settings["smtp_from"]
-    msg["To"] = settings["recipient"]
-    msg.set_content(
-        f"Samples were recorded as collected today ({local_today:%A, %d %B %Y}).\n\n"
-        "Please send a courier to pick up these samples today. Thank you.\n"
-    )
+    for recipient in settings["recipients"]:
+        msg = EmailMessage()
+        # msg["Subject"] = f"HORIZONS SAMPLE NOTIFICATION: "
+        msg["Subject"] = f"TEST PLEASE IGNORE TEST: "
+        msg["From"] = settings["smtp_from"]
+        msg["To"] = recipient
+        msg.set_content(
+            f"Samples were recorded as collected today ({local_today:%A, %d %B %Y}).\n\n"
+            "Please send a courier to pick up these samples today. Thank you.\n"
+        )
 
-    context = ssl.create_default_context()
-    if settings["smtp_ssl"]:
-        with smtplib.SMTP_SSL(
-            settings["smtp_host"], settings["smtp_port"], context=context, timeout=30
-        ) as server:
-            server.login(settings["smtp_username"], settings["smtp_password"])
-            server.send_message(msg)
-    else:
-        with smtplib.SMTP(settings["smtp_host"], settings["smtp_port"], timeout=30) as server:
-            server.ehlo()
-            if settings["smtp_starttls"]:
-                server.starttls(context=context)
+        context = ssl.create_default_context()
+        if settings["smtp_ssl"]:
+            with smtplib.SMTP_SSL(
+                settings["smtp_host"], settings["smtp_port"], context=context, timeout=30
+            ) as server:
+                server.login(settings["smtp_username"], settings["smtp_password"])
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(settings["smtp_host"], settings["smtp_port"], timeout=30) as server:
                 server.ehlo()
-            server.login(settings["smtp_username"], settings["smtp_password"])
-            server.send_message(msg)
+                if settings["smtp_starttls"]:
+                    server.starttls(context=context)
+                    server.ehlo()
+                server.login(settings["smtp_username"], settings["smtp_password"])
+                server.send_message(msg)
 
-    log.info("Sent samples-expected SMTP alert to %s.", settings["recipient"])
+        log.info("Sent samples-expected SMTP alert to %s.", recipient)
 
 
 def main() -> int:
     settings = load_settings()
+    log.info(f"Found recipients:{settings['recipients']}")
     tz = ZoneInfo(settings["timezone"])
-    # now = datetime.now(tz)
-    now = datetime(year=2026, month=10, day=15, hour=13)
+    now = datetime.now(tz)
+    # now = datetime(year=2026, month=10, day=15, hour=13)
     today = now.date()
     today_str = today.isoformat()
 
